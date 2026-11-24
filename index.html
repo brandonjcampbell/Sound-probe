@@ -37,7 +37,7 @@ h1{font-family:var(--display);font-weight:600;font-size:30px;line-height:1.1;mar
 .lede{color:var(--muted);max-width:62ch;margin:0}
 section{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 14px 16px;display:flex;flex-direction:column;gap:12px}
 h2{font-family:var(--display);font-weight:600;font-size:17px;letter-spacing:.6px;text-transform:uppercase;margin:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:fit-content;max-width:100%}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:fit-content;max-width:100%}
 .seg button{border:0;background:transparent;color:var(--ink);font:500 14px var(--body);padding:8px 16px;cursor:pointer;border-right:1px solid var(--line)}
 .seg button:last-child{border-right:0}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
@@ -69,7 +69,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible,.filebtn:focus-wi
 canvas{display:block;width:100%;height:260px}
 .note{font-size:13px;color:var(--muted);margin:0;max-width:68ch}
 .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
-table{border-collapse:collapse;width:100%;font-size:13px;min-width:640px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:800px}
 th,td{padding:6px 9px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
 th{font-weight:500;color:var(--muted);font-size:12px}
 td.l,th.l{text-align:left;white-space:normal}
@@ -138,6 +138,11 @@ details li{margin:4px 0}
 
 <section aria-labelledby="h-res">
   <h2 id="h-res">3. Result <span class="chip example" id="res-chip">Example, not a measurement</span></h2>
+  <div class="seg hide" id="views" role="group" aria-label="What to show">
+    <button type="button" id="v-raw" aria-pressed="true">Raw</button>
+    <button type="button" id="v-ratio" aria-pressed="false">Against reference</button>
+    <button type="button" id="v-sub" aria-pressed="false">Reference subtracted</button>
+  </div>
   <div class="tiles" id="tiles"></div>
   <div class="plot"><canvas id="cv" width="760" height="260" aria-label="Result chart"></canvas></div>
   <p class="note" id="res-note"></p>
@@ -151,7 +156,7 @@ details li{margin:4px 0}
 <section aria-labelledby="h-log">
   <h2 id="h-log">4. Runs</h2>
   <div class="tablewrap"><table id="log"><thead><tr>
-    <th class="l">Time</th><th class="l">Label</th><th class="l">Test</th><th>Peak Hz</th><th>Width Hz</th><th>Volume cc</th><th>Ring ms</th><th>Delay ms</th><th>Speed m/s</th><th>Level dB</th>
+    <th class="l">Time</th><th class="l">Label</th><th class="l">Test</th><th>Peak Hz</th><th>Width Hz</th><th>Volume cc</th><th>Change at Hz</th><th>Change dB</th><th>Ring ms</th><th>Delay ms</th><th>Speed m/s</th><th>Level dB</th>
   </tr></thead><tbody></tbody></table></div>
   <div class="row">
     <button type="button" class="btn small" id="copy">Copy the table</button>
@@ -169,6 +174,7 @@ details li{margin:4px 0}
       <li><b>Keep the volume modest.</b> About the strength of a phone buzzing, no more.</li>
     </ol>
     <ul>
+      <li><b>Subtracting the direct sound.</b> When the speaker and microphone hear each other directly, set a reference and look at "Reference subtracted": it shows only what changed since the reference. It works only if nothing moves between the two runs.</li>
       <li><b>Sweep</b> finds the resonance. The volume figure is A ÷ (peak² − base²), with the two constants below. It only means something for a cavity those constants were fitted to.</li>
       <li><b>Pulses</b> give the ring time. With two sensors on the left and right inputs, a known distance apart and in line with the driver, they also give the ripple's speed across the surface.</li>
       <li><b>Tone</b> holds one pitch, so the sensor can be moved from spot to spot to find where the note carries.</li>
@@ -246,6 +252,10 @@ function smooth(a,k){const n=a.length,o=new Float64Array(n);for(let i=0;i<n;i++)
 function magOfWindow(ir,start,len,nfft){const re=new Float64Array(nfft),im=new Float64Array(nfft),N=ir.length,ta=Math.max(4,Math.round(len*0.08));
   for(let i=0;i<len;i++){let w=1;if(i<ta)w=0.5-0.5*Math.cos(Math.PI*i/ta);else if(i>len-ta)w=0.5-0.5*Math.cos(Math.PI*(len-i)/ta);re[i]=ir[((start+i)%N+N)%N]*w;}
   fft(re,im,false);const m=new Float64Array(nfft/2);for(let i=0;i<nfft/2;i++)m[i]=Math.hypot(re[i],im[i]);return m;}
+function segOf(ir,start,len){const N=ir.length,ta=Math.max(4,Math.round(len*0.08)),o=new Float64Array(len);
+  for(let i=0;i<len;i++){let w=1;if(i<ta)w=0.5-0.5*Math.cos(Math.PI*i/ta);else if(i>len-ta)w=0.5-0.5*Math.cos(Math.PI*(len-i)/ta);o[i]=ir[((start+i)%N+N)%N]*w;}return o;}
+function specOf(seg,nfft){const re=new Float64Array(nfft),im=new Float64Array(nfft);re.set(seg);fft(re,im,false);return{re,im};}
+function gridDb(mag,df,k){const ms=smooth(mag,k),o=[];for(let f=20;f<=600.001;f+=0.5)o.push(20*Math.log10(ms[Math.round(f/df)]+1e-12));return o;}
 function analyseSweep(rec,stim,sr,s){
   const D=Math.max(1,Math.floor(sr/2400)),fs=sr/D,r=decimate(rec,D),x=decimate(stim,D);
   const N=pow2(Math.min(r.length+x.length,1<<18));
@@ -253,15 +263,30 @@ function analyseSweep(rec,stim,sr,s){
   Rr.set(r.subarray(0,Math.min(r.length,N)));Sr.set(x.subarray(0,Math.min(x.length,N)));
   fft(Rr,Ri,false);fft(Sr,Si,false);
   let pmax=0;for(let i=0;i<N;i++){const p=Sr[i]*Sr[i]+Si[i]*Si[i];if(p>pmax)pmax=p;}
-  const eps=pmax*1e-3,lo=s.f1*0.9,hi=s.f2*1.08,Hr=new Float64Array(N),Hi=new Float64Array(N);
-  for(let i=0;i<N;i++){const f=(i<=N/2?i:N-i)*fs/N;if(f<lo||f>hi)continue;const p=Sr[i]*Sr[i]+Si[i]*Si[i]+eps;Hr[i]=(Rr[i]*Sr[i]+Ri[i]*Si[i])/p;Hi[i]=(Ri[i]*Sr[i]-Rr[i]*Si[i])/p;}
+  const eps=pmax*1e-3,lo=s.f1*0.88,hi=s.f2*1.1,Hr=new Float64Array(N),Hi=new Float64Array(N);
+  for(let i=0;i<N;i++){const f=(i<=N/2?i:N-i)*fs/N;if(f<=lo||f>=hi)continue;let w=1;if(f<s.f1)w=0.5-0.5*Math.cos(Math.PI*(f-lo)/(s.f1-lo));else if(f>s.f2)w=0.5+0.5*Math.cos(Math.PI*(f-s.f2)/(hi-s.f2));
+    const p=Sr[i]*Sr[i]+Si[i]*Si[i]+eps;Hr[i]=w*(Rr[i]*Sr[i]+Ri[i]*Si[i])/p;Hi[i]=w*(Ri[i]*Sr[i]-Rr[i]*Si[i])/p;}
   fft(Hr,Hi,true);const ir=Hr;
   let pk=0,pv=0;for(let i=0;i<N;i++){const v=Math.abs(ir[i]);if(v>pv){pv=v;pk=i;}}
-  const win=Math.round(0.45*fs),pre=Math.round(0.03*fs),nfft=pow2(win*4);
-  const mag=magOfWindow(ir,pk-pre,win,nfft),noise=magOfWindow(ir,pk-pre-Math.round(1.2*fs)-win,win,nfft);
-  const df=fs/nfft,freqs=[],db=[],nz=[];const ms=smooth(mag,Math.max(1,Math.round(1.5/df))),ns=smooth(noise,Math.max(2,Math.round(6/df)));
-  for(let f=20;f<=600.001;f+=0.5){const i=Math.round(f/df);freqs.push(f);db.push(20*Math.log10(ms[i]+1e-12));nz.push(20*Math.log10(ns[i]+1e-12));}
-  return{kind:"sweep",freqs,db,nz,f1:s.f1,f2:s.f2,latency:pk/fs};
+  const win=Math.round(0.45*fs),pre=Math.round(0.03*fs),nfft=pow2(win*4),df=fs/nfft,half=nfft/2;
+  const seg=segOf(ir,pk-pre,win),sp=specOf(seg,nfft),mag=new Float64Array(half);for(let i=0;i<half;i++)mag[i]=Math.hypot(sp.re[i],sp.im[i]);
+  const lateLen=Math.round(0.3*fs),noise=magOfWindow(ir,pk-pre-Math.round(1.2*fs)-win,win,nfft),late=magOfWindow(ir,pk+Math.round(0.012*fs),lateLen,nfft);
+  const k1=Math.max(1,Math.round(1.5/df)),freqs=[];for(let f=20;f<=600.001;f+=0.5)freqs.push(f);
+  const db=gridDb(mag,df,k1),nz=gridDb(noise,df,Math.max(2,Math.round(6/df))),lt=gridDb(late,df,k1),drop=10*Math.log10(lateLen/win);
+  return{kind:"sweep",freqs,db,nz,late:lt,lateFloor:nz.map(v=>v+drop),seg:Array.from(seg,v=>+v.toPrecision(6)),fs,f1:s.f1,f2:s.f2,latency:pk/fs};
+}
+/* Line a run up with the reference in time and level, subtract, and report what is left relative to the reference. */
+function changeFromRef(res,ref){
+  if(!ref||!ref.seg||!res.seg||ref.seg.length!==res.seg.length||Math.abs(ref.fs-res.fs)>1||ref.f1!==res.f1||ref.f2!==res.f2)return null;
+  const a=res.seg,b=ref.seg,L=a.length,M=8,cc=[];let best=-Infinity,bl=0;
+  for(let l=-M;l<=M;l++){let acc=0;for(let i=0;i<L;i++){const j=i+l;if(j>=0&&j<L)acc+=a[i]*b[j];}cc.push(acc);if(acc>best){best=acc;bl=l;}}
+  let frac=0;const k=bl+M;if(k>0&&k<cc.length-1){const den=cc[k-1]-2*cc[k]+cc[k+1];if(den!==0)frac=0.5*(cc[k-1]-cc[k+1])/den;}
+  const tau=bl+frac,nfft=pow2(L*4),A=specOf(a,nfft),B=specOf(b,nfft),df=res.fs/nfft,half=nfft/2,i0=Math.floor(res.f1/df),i1=Math.ceil(res.f2/df);let num=0,den2=0;
+  for(let i=0;i<half;i++){const ph=-2*Math.PI*i*tau/nfft,c=Math.cos(ph),sn=Math.sin(ph),xr=A.re[i]*c-A.im[i]*sn,xi=A.re[i]*sn+A.im[i]*c;A.re[i]=xr;A.im[i]=xi;if(i>=i0&&i<=i1){num+=xr*B.re[i]+xi*B.im[i];den2+=xr*xr+xi*xi;}}
+  const al=den2>0?num/den2:1,Dm=new Float64Array(half),Rm=new Float64Array(half);let dsum=0,rsum=0;
+  for(let i=0;i<half;i++){Dm[i]=Math.hypot(al*A.re[i]-B.re[i],al*A.im[i]-B.im[i]);Rm[i]=Math.hypot(B.re[i],B.im[i]);if(i>=i0&&i<=i1){dsum+=Dm[i]*Dm[i];rsum+=Rm[i]*Rm[i];}}
+  const k1=Math.max(1,Math.round(1.5/df)),dd=gridDb(Dm,df,k1),rr=gridDb(Rm,df,k1);
+  return{rel:dd.map((v,i)=>v-rr[i]),floor:res.nz.map((v,i)=>v-rr[i]),self:rsum>0&&dsum/rsum<1e-8,overall:10*Math.log10((dsum+1e-30)/(rsum+1e-30)),gain:al,shiftMs:tau/res.fs*1000};
 }
 function peakOf(freqs,vals,nz,fa,fb){
   let bi=-1,bv=-1e9;for(let i=1;i<freqs.length-1;i++){const f=freqs[i];if(f<fa||f>fb)continue;if(vals[i]>=vals[i-1]&&vals[i]>=vals[i+1]&&vals[i]>bv){bv=vals[i];bi=i;}}
@@ -382,25 +407,40 @@ function finishRun(chans,stim,sr,s,how){
 
 /* ---------- showing a result ---------- */
 function tiles(list){const t=$("tiles");t.textContent="";for(const [k,v,u] of list){const d=document.createElement("div");d.className="tile";const a=document.createElement("span");a.className="k";a.textContent=k;const b=document.createElement("span");b.className="v";b.textContent=v;if(u){const c=document.createElement("span");c.className="u";c.textContent=" "+u;b.appendChild(c);}d.append(a,b);t.appendChild(d);}}
-function refCurve(res){if(!state.ref||res.kind!=="sweep"||state.ref.freqs.length!==res.freqs.length)return null;return res.db.map((v,i)=>v-state.ref.db[i]);}
-function summary(res,s){
-  if(res.kind==="sweep"){const rel=refCurve(res),vals=rel||res.db,pk=peakOf(res.freqs,vals,rel?null:res.nz,Math.max(res.f1+8,50),Math.min(res.f2-10,320));const snr=pk?peakOf(res.freqs,res.db,res.nz,pk.f-2,pk.f+2):null;
-    const clear=!!pk&&pk.q>=1.5&&pk.prominence>=5;return{pk,clear,vol:clear?volFromNote(pk.f):null,snr:snr?snr.snr:null,rel:!!rel};}
-  return{};
+function viewsFor(res){if(res.kind!=="sweep"||!res.late)return["raw"];const v=["raw"],r=state.ref;if(r&&r.freqs&&r.freqs.length===res.freqs.length){v.push("ratio");if(changeFromRef(res,r))v.push("sub");}return v;}
+function pickView(res){const av=viewsFor(res);return av.includes(state.view)?state.view:(av.includes("ratio")?"ratio":"raw");}
+function curveFor(res,view){
+  if(view==="ring")return{view,vals:res.late,floor:res.lateFloor,ylabel:"dB, ring only"};
+  if(view==="ratio")return{view,vals:res.db.map((v,i)=>v-state.ref.db[i]),floor:null,ylabel:"dB against reference"};
+  if(view==="sub"){const c=changeFromRef(res,state.ref);return{view,vals:c.rel,floor:c.floor,ylabel:"dB, change from reference",chg:c};}
+  return{view:"raw",vals:res.db,floor:res.nz,ylabel:"dB"};
+}
+function summary(res,view){
+  if(res.kind!=="sweep")return{};
+  const c=curveFor(res,view||pickView(res)),pk=peakOf(res.freqs,c.vals,c.floor,Math.max(res.f1+8,50),Math.min(res.f2-10,320));
+  let snr=pk?pk.snr:null;if(pk&&c.view==="ratio"){const p2=peakOf(res.freqs,res.db,res.nz,pk.f-2,pk.f+2);snr=p2?p2.snr:null;}
+  const self=!!(c.chg&&c.chg.self),clear=!!pk&&!self&&pk.q>=1.5&&pk.prominence>=5&&(snr==null||snr>=6);
+  return{pk,clear,vol:clear?volFromNote(pk.f):null,snr,view:c.view,rel:c.view==="ratio",chg:c.chg||null,self};
 }
 function show(res,s){
   $("res-chip").className="chip"+(state.example?" example":" good");$("res-chip").textContent=state.example?"Example, not a measurement":(s.test==="sweep"?"Sweep":s.test==="pulses"?"Pulses":"Tone");
   $("setref").disabled=state.example||res.kind!=="sweep";$("clearref").classList.toggle("hide",!state.ref);$("savewav").classList.toggle("hide",state.example||!state.lastRec||!canAnchorSave);
-  let note="";
-  if(res.kind==="sweep"){const m=summary(res,s),pk=m.pk;
-    tiles([[m.clear||!pk?"Peak":"Highest point (no clear peak)",pk?fmt(pk.f,1):"–","Hz"],["Width at −3 dB",pk?fmt(pk.width,0):"–","Hz"],["Sharpness (Q)",pk?fmt(pk.q,1):"–",""],["Volume, by the formula",m.vol?fmt(m.vol,0):"–","cc"],["Signal over noise",m.snr!=null?fmt(m.snr,0):"–","dB"]]);
-    note=m.rel?"Shown against your reference run, so the driver's and sensor's own colouring is removed.":"Shown raw. Until a reference run is set, the peak may belong to the driver or sensor, not to what you are measuring.";
-    if(m.snr!=null&&m.snr<10)note+=" The signal is weak at the peak: press the driver more firmly or raise the volume.";
-    if(pk&&!m.clear)note=(m.rel?"Shown against your reference run. ":"")+"No clear resonance. The response is one broad hump with no narrow peak, so the highest point and the volume figure mean nothing. A speaker and a microphone hearing each other through the air look like this; a contact driver and a reference run are what bring a real peak out.";
-  }else if(res.kind==="pulses"){const a=res.info[0];
+  let note="";const vb=$("views");
+  if(res.kind==="sweep"){const av=viewsFor(res),view=pickView(res);state.viewShown=view;
+    vb.classList.toggle("hide",state.example||av.length<2);for(const k of ["raw","ratio","sub"]){const b=$("v-"+k);b.classList.toggle("hide",!av.includes(k));b.setAttribute("aria-pressed",String(k===view));}
+    const m=summary(res,view),pk=m.pk,sub=view==="sub";
+    const list=[[sub?(m.clear?"Largest change at":"Largest change at (not clear)"):(m.clear||!pk?"Peak":"Highest point (no clear peak)"),pk&&!m.self?fmt(pk.f,1):"–","Hz"],["Width at −3 dB",pk&&!m.self?fmt(pk.width,0):"–","Hz"],["Sharpness (Q)",pk&&!m.self?fmt(pk.q,1):"–",""],["Volume, by the formula",m.vol?fmt(m.vol,0):"–","cc"]];
+    if(sub){list.push(["Size of the change",pk&&!m.self?fmt(pk.level,0):"–","dB"]);list.push(["Above the noise",m.snr!=null&&!m.self?fmt(m.snr,0):"–","dB"]);}else list.push(["Signal over noise",m.snr!=null?fmt(m.snr,0):"–","dB"]);
+    tiles(list);
+    if(view==="raw")note=state.ref?"Shown raw, without the reference.":"Shown raw. Until a reference run is set, the peak may belong to the driver or sensor, not to what you are measuring.";
+    else if(view==="ratio")note="Shown against your reference run, so the driver's and sensor's own colouring is removed.";
+    else note=m.self?"This run is the reference, so nothing is left after subtracting.":"The reference run was lined up with this one in time and level and subtracted, so only what changed between them is left. 0 dB would be a change as large as the reference itself; −40 dB is one part in a hundred. Believe it only where the line stands clear of the grey noise line, and only if nothing moved between the two runs. Over the whole sweep the change is "+fmt(m.chg.overall,0)+" dB.";
+    if((view==="raw"||view==="ratio")&&m.snr!=null&&m.snr<10)note+=" The signal is barely above the noise at the highest point: press the driver more firmly or raise the volume.";
+    if(pk&&!m.clear&&!m.self){if((view==="raw"||view==="ratio")&&m.snr!=null&&m.snr<6)note="Nothing here stands above the noise, so there is no peak to read. Check that the sound is reaching the sensor and raise the volume.";else if(view==="raw"||view==="ratio")note=(m.rel?"Shown against your reference run. ":"")+"No clear resonance. The response is one broad hump with no narrow peak, so the highest point and the volume figure mean nothing. A speaker and a microphone hearing each other through the air look like this. If a reference is set, try Reference subtracted: it removes the direct sound.";else note+=" There is no narrow peak clear of the noise in this view.";}
+  }else if(res.kind==="pulses"){vb.classList.add("hide");const a=res.info[0];
     tiles([["Ring pitch",fmt(a.freq,0),"Hz"],["Ring time",a.ring?fmt(a.ring,0):"–","ms"],["Pulses averaged",String(res.used),""],["Delay between sensors",res.two&&res.delay!=null?fmt(Math.abs(res.delay),1):"–","ms"],["Ripple speed",res.speed?fmt(res.speed,1):"–","m/s"]]);
     note=res.two?"Two sensors found. Speed is the spacing you entered ("+res.gap+" cm) divided by the delay.":"One sensor found, so there is no delay or speed. Use the left and right inputs for two.";
-  }else{tiles([["Pitch",fmt(res.f,0),"Hz"],["Level",fmt(res.level,1),"dB"],["Over the noise beside it",fmt(res.snr,0),"dB"]]);
+  }else{vb.classList.add("hide");tiles([["Pitch",fmt(res.f,0),"Hz"],["Level",fmt(res.level,1),"dB"],["Over the noise beside it",fmt(res.snr,0),"dB"]]);
     note="Move the sensor and repeat. Where the level stays high, the note carries; where it drops by 10 dB or more, it does not.";}
   $("res-note").textContent=note;draw(res);
 }
@@ -415,15 +455,15 @@ function draw(res){
     g.textAlign="right";g.fillText(xl,L+pw,H-6);g.save();g.translate(11,T+ph/2);g.rotate(-Math.PI/2);g.textAlign="center";g.fillText(yl,0,0);g.restore();return{X,Y};};
   const path=(xs,ys,X,Y,col,w,x0,x1)=>{g.beginPath();let st=false;for(let i=0;i<xs.length;i++){if(xs[i]<x0||xs[i]>x1)continue;const px=X(xs[i]),py=clamp(Y(ys[i]),T,T+ph);if(!st){g.moveTo(px,py);st=true;}else g.lineTo(px,py);}g.strokeStyle=col;g.lineWidth=w;g.lineJoin="round";g.stroke();};
   const ticks=(a,b,step)=>{const o=[];for(let v=Math.ceil(a/step)*step;v<=b+1e-9;v+=step)o.push(Math.round(v*1000)/1000);return o;};
-  if(res.kind==="sweep"){const rel=refCurve(res),vals=rel||res.db,x0=res.f1,x1=res.f2;let mx=-1e9;for(let i=0;i<res.freqs.length;i++)if(res.freqs[i]>=x0&&res.freqs[i]<=x1)mx=Math.max(mx,vals[i]);
-    const y1=Math.ceil((mx+3)/5)*5,y0=y1-40,xs=(x1-x0)>320?100:50,{X,Y}=axes(x0,x1,y0,y1,ticks(x0,x1,xs),ticks(y0,y1,10),"Hz",rel?"dB against reference":"dB",v=>String(v),v=>String(v));
-    if(!rel)path(res.freqs,res.nz,X,Y,floor,1.2,x0,x1);
+  if(res.kind==="sweep"){const cur=curveFor(res,state.viewShown&&viewsFor(res).includes(state.viewShown)?state.viewShown:"raw"),vals=cur.vals,rel=cur.view!=="raw",x0=res.f1,x1=res.f2;let mx=-1e9;for(let i=0;i<res.freqs.length;i++)if(res.freqs[i]>=x0&&res.freqs[i]<=x1)mx=Math.max(mx,vals[i]);
+    const y1=Math.ceil((mx+3)/5)*5,y0=y1-40,xs=(x1-x0)>320?100:50,{X,Y}=axes(x0,x1,y0,y1,ticks(x0,x1,xs),ticks(y0,y1,10),"Hz",cur.ylabel,v=>String(v),v=>String(v));
+    if(cur.floor)path(res.freqs,cur.floor,X,Y,floor,1.2,x0,x1);
     g.save();g.beginPath();g.rect(L,T,pw,ph);g.clip();g.beginPath();let st=false,lastx=L;for(let i=0;i<res.freqs.length;i++){const f=res.freqs[i];if(f<x0||f>x1)continue;const px=X(f),py=clamp(Y(vals[i]),T,T+ph);if(!st){g.moveTo(px,T+ph);g.lineTo(px,py);st=true;}else g.lineTo(px,py);lastx=px;}g.lineTo(lastx,T+ph);g.closePath();g.globalAlpha=.12;g.fillStyle=trace;g.fill();g.restore();
     path(res.freqs,vals,X,Y,trace,2.2,x0,x1);
     const pk=peakOf(res.freqs,vals,null,Math.max(x0+8,50),Math.min(x1-10,320));
     if(pk){const px=X(pk.f),py=clamp(Y(pk.level),T,T+ph);g.strokeStyle=ink;g.setLineDash([3,3]);g.lineWidth=1;g.beginPath();g.moveTo(px,py);g.lineTo(px,T+ph);g.stroke();g.setLineDash([]);g.fillStyle=trace;g.beginPath();g.arc(px,py,4.5,0,7);g.fill();g.strokeStyle=css("--bg");g.lineWidth=2;g.stroke();
       g.fillStyle=ink;g.font="600 13px "+css("--body");g.textAlign=px>L+pw-70?"right":"left";g.fillText(fmt(pk.f,1)+" Hz",px+(px>L+pw-70?-9:9),Math.max(T+9,py-10));}
-    if(!rel){g.font="12px "+css("--body");g.fillStyle=muted;g.textAlign="left";g.fillText("grey: noise floor",L+8,T+ph-10);}
+    if(cur.floor){g.font="12px "+css("--body");g.fillStyle=muted;g.textAlign="left";g.fillText("grey: noise floor",L+8,T+ph-10);}
   }else if(res.kind==="pulses"){const n=res.avg[0].length,tms=Array.from({length:n},(_,i)=>i/res.fs*1000-20);let mx=1e-9;res.avg.forEach(a=>a.forEach(v=>{mx=Math.max(mx,Math.abs(v));}));
     const {X,Y}=axes(tms[0],tms[n-1],-1.1,1.1,ticks(0,tms[n-1],50),[-1,0,1],"ms after the pulse","",v=>String(v),v=>v===0?"0":"");
     if(res.two)path(tms,res.avg[1].map(v=>v/mx),X,Y,accent,1.6,-1e9,1e9);path(tms,res.avg[0].map(v=>v/mx),X,Y,trace,2,-1e9,1e9);
@@ -435,17 +475,19 @@ function exampleResult(){const freqs=[],db=[],nz=[];for(let f=20;f<=600.001;f+=0
 
 /* ---------- run log ---------- */
 function addLog(res,s){const now=new Date(),e={t:now.toISOString(),label:$("label").value.trim(),test:s.test};
-  if(res.kind==="sweep"){const m=summary(res,s);if(m.pk){e.peak=+m.pk.f.toFixed(1);e.width=+m.pk.width.toFixed(0);e.level=+m.pk.level.toFixed(1);}if(m.vol)e.vol=+m.vol.toFixed(0);e.test="sweep "+s.f1+"–"+s.f2+(m.rel?" (ref)":"")+(m.clear?"":" · no clear peak");}
+  if(res.kind==="sweep"){const av=viewsFor(res),m=summary(res,av.includes("ratio")?"ratio":"raw");
+    if(res.late){if(av.includes("sub")){const c=summary(res,"sub");if(!c.self){e.chghz=c.pk&&c.clear?+c.pk.f.toFixed(1):"none";e.chgdb=c.pk&&c.clear?+c.pk.level.toFixed(0):+c.chg.overall.toFixed(0);}}}
+    if(m.pk){e.peak=+m.pk.f.toFixed(1);e.width=+m.pk.width.toFixed(0);e.level=+m.pk.level.toFixed(1);}if(m.vol)e.vol=+m.vol.toFixed(0);e.test="sweep "+s.f1+"–"+s.f2+(m.rel?" (ref)":"")+(m.clear?"":" · no clear peak");}
   else if(res.kind==="pulses"){e.peak=+res.info[0].freq.toFixed(0);if(res.info[0].ring)e.ring=+res.info[0].ring.toFixed(0);if(res.two&&res.delay!=null)e.delay=+Math.abs(res.delay).toFixed(1);if(res.speed)e.speed=+res.speed.toFixed(1);e.test="pulses "+s.gap+" cm";}
   else{e.peak=s.f;e.level=+res.level.toFixed(1);e.test="tone";}
   state.log.push(e);if(state.log.length>200)state.log.shift();persist();renderLog();}
 function persist(){store.set({log:state.log,ref:state.ref});}
 function renderLog(){const tb=$("log").tBodies[0];tb.textContent="";
-  if(!state.log.length){const tr=tb.insertRow(),td=tr.insertCell();td.colSpan=10;td.className="l";td.textContent="No runs yet. Each run adds a row here and stays on this device.";return;}
-  for(const e of state.log.slice().reverse()){const tr=tb.insertRow(),d=new Date(e.t),cells=[[d.toLocaleDateString(undefined,{month:"short",day:"numeric"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}),"l"],[e.label||"–","l"],[e.test,"l"],[e.peak,"num"],[e.width,"num"],[e.vol,"num"],[e.ring,"num"],[e.delay,"num"],[e.speed,"num"],[e.level,"num"]];
+  if(!state.log.length){const tr=tb.insertRow(),td=tr.insertCell();td.colSpan=12;td.className="l";td.textContent="No runs yet. Each run adds a row here and stays on this device.";return;}
+  for(const e of state.log.slice().reverse()){const tr=tb.insertRow(),d=new Date(e.t),cells=[[d.toLocaleDateString(undefined,{month:"short",day:"numeric"})+" "+d.toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}),"l"],[e.label||"–","l"],[e.test,"l"],[e.peak,"num"],[e.width,"num"],[e.vol,"num"],[e.chghz,"num"],[e.chgdb,"num"],[e.ring,"num"],[e.delay,"num"],[e.speed,"num"],[e.level,"num"]];
     for(const [v,c] of cells){const td=tr.insertCell();td.className=c;td.textContent=(v==null||v==="")?"–":String(v);}}}
-function logText(sep){const head=["time","label","test","peak_hz","width_hz","volume_cc","ring_ms","delay_ms","speed_m_s","level_db"],q=v=>{v=v==null?"":String(v);return sep===","&&/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
-  return [head.join(sep)].concat(state.log.map(e=>[e.t,e.label,e.test,e.peak,e.width,e.vol,e.ring,e.delay,e.speed,e.level].map(q).join(sep))).join("\n");}
+function logText(sep){const head=["time","label","test","peak_hz","width_hz","volume_cc","change_hz","change_db","ring_ms","delay_ms","speed_m_s","level_db"],q=v=>{v=v==null?"":String(v);return sep===","&&/[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  return [head.join(sep)].concat(state.log.map(e=>[e.t,e.label,e.test,e.peak,e.width,e.vol,e.chghz,e.chgdb,e.ring,e.delay,e.speed,e.level].map(q).join(sep))).join("\n");}
 
 /* ---------- saving files ---------- */
 const hosted=!!(window.claude&&window.claude.use),canAnchorSave=!hosted;
@@ -464,10 +506,11 @@ function setTest(t){state.test=t;for(const k of ["sweep","pulses","tone"]){$("t-
 $("vol").addEventListener("input",()=>{$("vol-v").textContent=$("vol").value+"%";});
 $("go").addEventListener("click",()=>{playAndRecord();});
 $("askmic").addEventListener("click",()=>{askMic();});
+["raw","ratio","sub"].forEach(k=>$("v-"+k).addEventListener("click",()=>{state.view=k;if(state.last)show(state.last.res,state.last.s);}));
 $("playonly").addEventListener("click",()=>{playOnly();});
 $("stop").addEventListener("click",()=>{if(running)running.stop();});
 $("file").addEventListener("change",e=>{importFile(e.target.files[0]);});
-$("setref").addEventListener("click",()=>{if(!state.last||state.last.res.kind!=="sweep")return;state.ref={freqs:state.last.res.freqs,db:state.last.res.db.map(v=>+v.toFixed(2)),t:new Date().toISOString()};persist();show(state.last.res,state.last.s);$("log-status").textContent="";setStatus("Reference set. Later sweeps are shown against it.","good");});
+$("setref").addEventListener("click",()=>{if(!state.last||state.last.res.kind!=="sweep")return;const lr=state.last.res;state.ref={freqs:lr.freqs,db:lr.db.map(v=>+v.toFixed(2)),seg:lr.seg,fs:lr.fs,f1:lr.f1,f2:lr.f2,t:new Date().toISOString()};persist();show(state.last.res,state.last.s);$("log-status").textContent="";setStatus("Reference set. Later sweeps are shown against it.","good");});
 $("clearref").addEventListener("click",()=>{state.ref=null;persist();const r=state.last||{res:exampleResult(),s:{test:"sweep"}};show(r.res,r.s);});
 $("savewav").addEventListener("click",async()=>{if(!state.lastRec)return;const c=state.lastRec.chans;let same=true;for(let i=0;i<c[0].length;i+=97){if(c[0][i]!==c[1][i]){same=false;break;}}await saveFile("sound-probe-"+new Date().toISOString().slice(0,19).replace(/[:T]/g,"-")+".wav",wavBlob(same?[c[0]]:c,state.lastRec.sr));});
 $("copy").addEventListener("click",async()=>{try{await navigator.clipboard.writeText(logText("\t"));$("log-status").textContent="Copied.";}catch(e){$("log-status").textContent="Copying was blocked. Use Save as CSV.";}});
@@ -477,7 +520,7 @@ let armed=false;$("clear").addEventListener("click",()=>{if(!armed){armed=true;$
 let rz;window.addEventListener("resize",()=>{clearTimeout(rz);rz=setTimeout(()=>{const r=state.last||{res:exampleResult(),s:{test:"sweep"}};draw(r.res);},120);});
 try{window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{const r=state.last||{res:exampleResult(),s:{test:"sweep"}};draw(r.res);});new MutationObserver(()=>{const r=state.last||{res:exampleResult(),s:{test:"sweep"}};draw(r.res);}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});}catch(e){}
 setTest("sweep");renderLog();show(exampleResult(),{test:"sweep"});micStartup();
-window.__probe={makeStimulus,analyse,decimate,peakOf,volFromNote};
+window.__probe={makeStimulus,analyse,decimate,peakOf,volFromNote,changeFromRef,summary,state};
 </script>
 </body>
 </html>
