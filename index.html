@@ -385,7 +385,7 @@ function tiles(list){const t=$("tiles");t.textContent="";for(const [k,v,u] of li
 function refCurve(res){if(!state.ref||res.kind!=="sweep"||state.ref.freqs.length!==res.freqs.length)return null;return res.db.map((v,i)=>v-state.ref.db[i]);}
 function summary(res,s){
   if(res.kind==="sweep"){const rel=refCurve(res),vals=rel||res.db,pk=peakOf(res.freqs,vals,rel?null:res.nz,Math.max(res.f1+8,50),Math.min(res.f2-10,320));const snr=pk?peakOf(res.freqs,res.db,res.nz,pk.f-2,pk.f+2):null;
-    return{pk,vol:pk?volFromNote(pk.f):null,snr:snr?snr.snr:null,rel:!!rel};}
+    const clear=!!pk&&pk.q>=1.5&&pk.prominence>=5;return{pk,clear,vol:clear?volFromNote(pk.f):null,snr:snr?snr.snr:null,rel:!!rel};}
   return{};
 }
 function show(res,s){
@@ -393,10 +393,10 @@ function show(res,s){
   $("setref").disabled=state.example||res.kind!=="sweep";$("clearref").classList.toggle("hide",!state.ref);$("savewav").classList.toggle("hide",state.example||!state.lastRec||!canAnchorSave);
   let note="";
   if(res.kind==="sweep"){const m=summary(res,s),pk=m.pk;
-    tiles([["Peak",pk?fmt(pk.f,1):"–","Hz"],["Width at −3 dB",pk?fmt(pk.width,0):"–","Hz"],["Sharpness (Q)",pk?fmt(pk.q,1):"–",""],["Volume, by the formula",m.vol?fmt(m.vol,0):"–","cc"],["Signal over noise",m.snr!=null?fmt(m.snr,0):"–","dB"]]);
+    tiles([[m.clear||!pk?"Peak":"Highest point (no clear peak)",pk?fmt(pk.f,1):"–","Hz"],["Width at −3 dB",pk?fmt(pk.width,0):"–","Hz"],["Sharpness (Q)",pk?fmt(pk.q,1):"–",""],["Volume, by the formula",m.vol?fmt(m.vol,0):"–","cc"],["Signal over noise",m.snr!=null?fmt(m.snr,0):"–","dB"]]);
     note=m.rel?"Shown against your reference run, so the driver's and sensor's own colouring is removed.":"Shown raw. Until a reference run is set, the peak may belong to the driver or sensor, not to what you are measuring.";
     if(m.snr!=null&&m.snr<10)note+=" The signal is weak at the peak: press the driver more firmly or raise the volume.";
-    if(pk&&pk.prominence<4)note+=" The curve is nearly flat, so the peak is not a clear resonance.";
+    if(pk&&!m.clear)note=(m.rel?"Shown against your reference run. ":"")+"No clear resonance. The response is one broad hump with no narrow peak, so the highest point and the volume figure mean nothing. A speaker and a microphone hearing each other through the air look like this; a contact driver and a reference run are what bring a real peak out.";
   }else if(res.kind==="pulses"){const a=res.info[0];
     tiles([["Ring pitch",fmt(a.freq,0),"Hz"],["Ring time",a.ring?fmt(a.ring,0):"–","ms"],["Pulses averaged",String(res.used),""],["Delay between sensors",res.two&&res.delay!=null?fmt(Math.abs(res.delay),1):"–","ms"],["Ripple speed",res.speed?fmt(res.speed,1):"–","m/s"]]);
     note=res.two?"Two sensors found. Speed is the spacing you entered ("+res.gap+" cm) divided by the delay.":"One sensor found, so there is no delay or speed. Use the left and right inputs for two.";
@@ -435,7 +435,7 @@ function exampleResult(){const freqs=[],db=[],nz=[];for(let f=20;f<=600.001;f+=0
 
 /* ---------- run log ---------- */
 function addLog(res,s){const now=new Date(),e={t:now.toISOString(),label:$("label").value.trim(),test:s.test};
-  if(res.kind==="sweep"){const m=summary(res,s);if(m.pk){e.peak=+m.pk.f.toFixed(1);e.width=+m.pk.width.toFixed(0);e.level=+m.pk.level.toFixed(1);}if(m.vol)e.vol=+m.vol.toFixed(0);e.test="sweep "+s.f1+"–"+s.f2+(m.rel?" (ref)":"");}
+  if(res.kind==="sweep"){const m=summary(res,s);if(m.pk){e.peak=+m.pk.f.toFixed(1);e.width=+m.pk.width.toFixed(0);e.level=+m.pk.level.toFixed(1);}if(m.vol)e.vol=+m.vol.toFixed(0);e.test="sweep "+s.f1+"–"+s.f2+(m.rel?" (ref)":"")+(m.clear?"":" · no clear peak");}
   else if(res.kind==="pulses"){e.peak=+res.info[0].freq.toFixed(0);if(res.info[0].ring)e.ring=+res.info[0].ring.toFixed(0);if(res.two&&res.delay!=null)e.delay=+Math.abs(res.delay).toFixed(1);if(res.speed)e.speed=+res.speed.toFixed(1);e.test="pulses "+s.gap+" cm";}
   else{e.peak=s.f;e.level=+res.level.toFixed(1);e.test="tone";}
   state.log.push(e);if(state.log.length>200)state.log.shift();persist();renderLog();}
